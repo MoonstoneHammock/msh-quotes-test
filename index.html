@@ -62,6 +62,7 @@ hr{border:0;border-top:1px solid var(--line);margin:10px 0}
 <div class="ar"><label><input type="checkbox" id="drv"> Driver food (₹1,000 / driver / night)</label><input id="drvn" type="number" min="1" value="1" disabled></div>
 <div id="adds"></div><p class="note">Add-on amounts are entered by sales (before tax) and attract 18% GST.</p></div>
 <div class="card"><h2>5 · Discount</h2><label style="max-width:300px"><span id="dcl">Discount % (max 10)</span><input id="dis" type="number" min="0" max="10" step="0.5" value="0"></label></div>
+<div class="card" id="apb" hidden><h2>Approval code</h2><p class="note">Groups of more than 30 adults can get up to 15% off. Need more than 15%? Ask your manager for an approval code and enter it here.</p><div class="g" style="grid-template-columns:1fr auto;align-items:end"><label>Approval code<input id="apc" placeholder="AP-XXXXX" autocomplete="off"></label><button id="apo">Apply code</button></div><p class="note" id="apm"></p></div>
 </div><aside class="card" id="sum"></aside></div>
 <script src="config.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -99,9 +100,9 @@ function autoAssign(){let a=num('ad'),k=num('k5'),f=num('k0');if(!rooms.length)r
 const nyP=(y,n)=>{const ks=Object.keys(y.s).map(Number).sort((a,b)=>a-b);if(y.x){const b=ks.filter(k=>k<=n).pop()||ks[0];return y.s[b]+Math.max(0,n-b)*y.x}return y.s[ks.find(k=>k>=n)||ks[ks.length-1]]};
 const nl=L=>[L.ny&&L.ny+' New Year package',L.sp&&L.sp+' Christmas special',L.wk&&L.wk+' weekday',L.we&&L.we+' Saturday'].filter(Boolean).join(' + ')+' night(s)';
 const tot=(d,r,t)=>d.unit?t[0]*r.a+t[0]*.5*r.k:t[0]+Math.max(0,r.a-2)*t[1]+Math.max(0,r.k-Math.max(0,2-r.a))*t[1]*.5;
-function calc(){const p=PR[pr.value],ns=nights(),cap=num('ad')>15?15:10,dc=Math.min(cap,num('dis')),E=[],ds=ns.map(d=>d.toISOString().slice(0,10));
+function calc(){const p=PR[pr.value],ns=nights(),cap=num('ad')>30&&apMax>15?apMax:num('ad')>15?15:10,dc=Math.min(cap,num('dis')),E=[],ds=ns.map(d=>d.toISOString().slice(0,10));
  $('times').textContent=`Check-in from ${p.in} · Check-out by ${p.out}`;
- {const pp=num('ad');$('dis').max=cap;$('dis').disabled=false;$('dcl').textContent='Discount % (max '+cap+'% for '+pp+' adult'+(pp==1?'':'s')+(pp>30?' – above 15% needs approval':'')+')';if(+$('dis').value>cap)$('dis').value=cap}
+ {const pp=num('ad');$('apb').hidden=num('ad')<=30;if(apPrior&&num('ad')>30&&apMax>15){$('apm').className='note ok';$('apm').textContent='This quote was approved earlier: discount up to '+apMax+'%.'}$('dis').max=cap;$('dis').disabled=false;$('dcl').textContent='Discount % (max '+cap+'% for '+pp+' adult'+(pp==1?'':'s')+(pp>30&&!(apMax>15)?' – above 15% needs approval':'')+')';if(+$('dis').value>cap)$('dis').value=cap}
  if(!$('rn').value.trim())E.push('Enter the sales rep name');
  if($('rp').value.replace(/\D/g,'').length<10)E.push('Enter a valid sales rep number');
  if(!ns.length)E.push('Select check-in and check-out dates');
@@ -148,17 +149,17 @@ $('addr').onclick=()=>{rooms.push({t:Object.keys(PR[pr.value].rooms)[0],a:0,k:0,
 $('auto').onclick=()=>{autoAssign();calc()};
 pr.onchange=()=>{rooms=[];autoAssign();drawAdds();calc()};
 $('ci').onchange=()=>{const d=new Date($('ci').value);if(!isNaN(d)){d.setUTCDate(d.getUTCDate()+1);$('co').min=d.toISOString().slice(0,10)}};
-let editing=null,PASS=localStorage.getItem('msh_test_pass')||'',rows2=[];
+let editing=null,apCode='',apMax=0,apPrior=false,PASS=localStorage.getItem('msh_test_pass')||'',rows2=[];
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const dl=(blob,name)=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500)};
 async function api(action,body){const r=await fetch(MSH_API,{method:'POST',body:JSON.stringify(Object.assign({action,pass:PASS},body||{}))});const j=await r.json();if(!j.ok)throw new Error(j.error||'Something went wrong');return j}
-const snap=()=>({pr:pr.value,gn:$('gn').value,ci:$('ci').value,co:$('co').value,rn:$('rn').value,rp:$('rp').value,ad:$('ad').value,k5:$('k5').value,k0:$('k0').value,pt:$('pt').value,dis:$('dis').value,drv:$('drv').checked,drvn:$('drvn').value,rooms:JSON.parse(JSON.stringify(rooms)),oth:($('oth')||{}).value||'',adds:[...document.querySelectorAll('[data-ad]')].filter(c=>c.checked).map(c=>({i:+c.dataset.ad,a:num2(c.dataset.ad),l:ADD[pr.value][+c.dataset.ad]||''}))});
-function load(f){pr.value=f.pr;drawAdds();['gn','ci','co','rn','rp','ad','k5','k0','pt','dis','drvn'].forEach(i=>$(i).value=f[i]);$('drv').checked=f.drv;$('drvn').disabled=!f.drv;rooms=f.rooms;drawRooms();$('oth').value=f.oth||'';f.adds.forEach(x=>{const ix=x.l?ADD[f.pr].indexOf(x.l):-1,ii=ix>=0?ix:x.i,c=document.querySelector(`[data-ad="${ii}"]`),a=document.querySelector(`[data-am="${ii}"]`);if(c){c.checked=true;a.disabled=false;a.value=x.a}});calc()}
+const snap=()=>({apMax:(last&&last.dc>15&&apMax>15)?apMax:0,pr:pr.value,gn:$('gn').value,ci:$('ci').value,co:$('co').value,rn:$('rn').value,rp:$('rp').value,ad:$('ad').value,k5:$('k5').value,k0:$('k0').value,pt:$('pt').value,dis:$('dis').value,drv:$('drv').checked,drvn:$('drvn').value,rooms:JSON.parse(JSON.stringify(rooms)),oth:($('oth')||{}).value||'',adds:[...document.querySelectorAll('[data-ad]')].filter(c=>c.checked).map(c=>({i:+c.dataset.ad,a:num2(c.dataset.ad),l:ADD[pr.value][+c.dataset.ad]||''}))});
+function load(f){apMax=f.apMax||0;apPrior=apMax>0;apCode='';pr.value=f.pr;drawAdds();['gn','ci','co','rn','rp','ad','k5','k0','pt','dis','drvn'].forEach(i=>$(i).value=f[i]);$('drv').checked=f.drv;$('drvn').disabled=!f.drv;rooms=f.rooms;drawRooms();$('oth').value=f.oth||'';f.adds.forEach(x=>{const ix=x.l?ADD[f.pr].indexOf(x.l):-1,ii=ix>=0?ix:x.i,c=document.querySelector(`[data-ad="${ii}"]`),a=document.querySelector(`[data-am="${ii}"]`);if(c){c.checked=true;a.disabled=false;a.value=x.a}});calc()}
 function showRev(){const r=$('rev');r.hidden=!editing;if(editing){r.innerHTML=`<b>${esc(editing.serial)}</b> · version ${editing.version}. Saving again creates <b>version ${editing.version+1}</b> with the same quote number. Earlier versions are kept.<br><span class="note">Prices use today’s rates, and the new quote is valid for 2 days from when you save it.</span><br><button class="s" id="nq" style="margin-top:8px">Start a brand-new quote</button>`;$('nq').onclick=()=>location.reload()}}
 async function gen(){$('dl').disabled=true;$('st').textContent='Saving…';try{const is=new Date(),ex=new Date(is.getTime()+2*864e5),R=last,f=snap();
- const res=await api('save',{quote:{serial:editing?editing.serial:'',rep:f.rn,repPhone:f.rp,guest:f.gn,property:PR[R.pk].name,ci:f.ci,co:f.co,total:Math.round(R.total),issued:is.toISOString(),valid:ex.toISOString(),data:{form:f,calc:R}}});
+ const res=await api('save',{quote:{serial:editing?editing.serial:'',rep:f.rn,repPhone:f.rp,guest:f.gn,property:PR[R.pk].name,ci:f.ci,co:f.co,total:Math.round(R.total),issued:is.toISOString(),valid:ex.toISOString(),adults:num('ad'),discount:R.dc,code:apPrior?'':apCode,data:{form:f,calc:R}}});
  dl(makePDF(R,res.serial,res.version,is,ex).output('blob'),res.serial+(res.version>1?'_v'+res.version:'')+'.pdf');
- editing={serial:res.serial,version:res.version};showRev();calc();$('st').textContent='Saved as '+res.serial+(res.version>1?' (version '+res.version+')':'')+' – PDF downloaded.'}
+ if(R.dc>15&&apCode){apPrior=true;apCode=''}editing={serial:res.serial,version:res.version};showRev();calc();$('st').textContent='Saved as '+res.serial+(res.version>1?' (version '+res.version+')':'')+' – PDF downloaded.'}
  catch(e){$('st').textContent='Not saved: '+e.message+'. Please try again.';$('dl').disabled=false}}
 function makePDF(R,sn,ver,is,ex){const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'pt',format:'a4'}),p=PR[R.pk],m=R.m,ns=R.ns.map(s=>new Date(s));
  [['pr','Poppins','normal'],['pm','PoppinsM','normal'],['ps','PoppinsS','normal'],['sr','Serif','normal'],['si','Serif','italic']].forEach(([k,f,s])=>{const n=f+s+'.ttf';doc.addFileToVFS(n,FONT[k]);doc.addFont(n,f,s)});
@@ -216,6 +217,9 @@ $('rqo').onclick=async()=>{const s=pad3($('rqs').value);if(!s){$('rqm').textCont
 $('rqs').onkeydown=e=>{if(e.key=='Enter')$('rqo').click()};
 $('tR').onclick=()=>{$('rq').hidden=!$('rq').hidden;$('tR').classList.toggle('on',!$('rq').hidden);if(!$('rq').hidden)$('rqs').focus()};
 $('tN').onclick=()=>location.reload();
+$('apo').onclick=async()=>{const c=$('apc').value.trim().toUpperCase();if(!c){$('apm').className='note bad';$('apm').textContent='Type the code first.';return}$('apm').className='note';$('apm').textContent='Checking…';
+ try{const j=await api('checkCode',{code:c});apCode=c;apMax=j.maxPct;apPrior=false;$('apc').value='';calc();$('apm').className='note ok';$('apm').textContent='Approved: up to '+j.maxPct+'% discount (code valid until '+j.until+'). It works once.'}catch(e){$('apm').className='note bad';$('apm').textContent=e.message}};
+$('apc').onkeydown=e=>{if(e.key=='Enter')$('apo').click()};
 async function unlock(p){PASS=p;try{await api('ping');localStorage.setItem('msh_test_pass',p);$('lock').hidden=true}catch(e){$('lm').textContent=e.message=='Wrong passcode'?'That passcode is not right.':'Could not connect – check the setup (config.js).'}}
 $('go').onclick=()=>unlock($('pw').value.trim());$('pw').onkeydown=e=>{if(e.key=='Enter')$('go').click()};
 if(typeof MSH_API=='undefined'||!/^https:\/\/script\.google\.com\//.test(MSH_API))$('lm').textContent='Not connected yet – the web app link in config.js is missing.';else if(PASS)unlock(PASS);
